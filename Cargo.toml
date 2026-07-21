@@ -1,0 +1,62 @@
+# dig-store-cache — the DIG Node's on-disk cache of already-verified `.dig` capsules.
+#
+# This is the "cache + reshare" leg of the content-replication flywheel (install -> connect ->
+# discover -> read -> CACHE -> reshare). When the node fetches + verifies a capsule (dig-download does
+# the NC-9 merkle/chain verify), it hands the finished bytes here; dig-store-cache admits them under a
+# bounded, LRU-evicted (pluggable policy), pin-aware, crash-safe store and reports the resulting
+# holdings so the node can announce itself as a provider (dig-dht `find_providers` / opcode-222
+# HoldingsAnnounce). Every read therefore makes content MORE available.
+#
+# BOUNDARY (deliberately tiny): a pure filesystem primitive. It has NO chain, NO network, and NO key
+# dependencies — the CALLER verifies content before `put` and chooses the cache location. It depends
+# DOWN only on `dig-store` (20-domain) for the canonical capsule identity + retrieval-key derivation,
+# so the ecosystem speaks ONE identity type (`dig_store::CapsuleIdentity`) end to end.
+[package]
+name = "dig-store-cache"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75.0"
+license = "Apache-2.0 OR MIT"
+description = "On-disk LRU (pluggable-policy), pin-aware, crash-safe cache of already-verified DIG `.dig` capsules for the DIG Node — the cache + reshare leg of the content-replication flywheel."
+repository = "https://github.com/DIG-Network/dig-store-cache"
+readme = "README.md"
+keywords = ["cache", "content-addressed", "lru", "dig", "capsule"]
+categories = ["caching", "filesystem"]
+
+[dependencies]
+# The canonical capsule identity (`CapsuleIdentity { store_id, root_hash }`), the `urn:dig:chia:…`
+# scheme, and the one-way `retrieval_key` derivation the on-disk filename is built from — reused so a
+# capsule is addressed byte-identically to the rest of the ecosystem (SYSTEM.md URN contract). Also
+# supplies `get_capsule_identity` for the optional structural `check_identity` sanity check + orphan
+# recovery. crates.io release (NC-7: prefer the release over bare-git).
+dig-store = "0.5"
+
+# Content-addressed hashing helper: hex-encode the 32-byte retrieval key into the capsule's filename.
+hex = "0.4"
+
+# Structured, catalogued errors (§6.2 stable error taxonomy).
+thiserror = "2"
+
+# The advisory manifest (`index.json`): recency + pinned overlay serialized as JSON. Disk stays
+# authoritative; the manifest only accelerates rebuild + carries the non-derivable bits.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Crash-safe atomic admission: a unique `tmp/<uuid>.part` staging name so two concurrent admissions of
+# the same capsule never collide, then an atomic rename into `capsules/`.
+uuid = { version = "1", features = ["v4"] }
+
+# Orphan recovery ONLY: when a capsule file exists with no manifest entry (a crash between rename and
+# manifest write), the identity is recovered by MEMORY-MAPPING the file and reading its header via
+# `dig_store::get_capsule_identity` — a zero-copy mapping, never a heap slurp, so recovery of a ~1 GiB
+# capsule stays RAM-flat (the path-based byte-flow rule). Normal admission/get never map.
+memmap2 = "0.9"
+
+[dev-dependencies]
+# Isolated temp cache roots per test.
+tempfile = "3"
+# Build synthetic CapsuleIdentity values + decode the golden fixture in tests.
+dig-store = "0.5"
+hex = "0.4"
+# Deterministically set file mtimes to assert manifest-less recency comes from disk mtimes.
+filetime = "0.2"
