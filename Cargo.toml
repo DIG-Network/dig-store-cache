@@ -13,7 +13,7 @@
 # so the ecosystem speaks ONE identity type (`dig_store::CapsuleIdentity`) end to end.
 [package]
 name = "dig-store-cache"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.75.0"
 license = "Apache-2.0 OR MIT"
